@@ -171,6 +171,20 @@
             border-radius: 8px;
             padding: 8px 25px;
         }
+
+        .text-display-container {
+            position: relative;
+            margin: 20px 0;
+        }
+        
+        .theme-badge {
+            margin-bottom: 10px;
+        }
+        
+        .theme-badge .badge {
+            font-size: 0.9em;
+            padding: 5px 10px;
+        }
     </style>
 </head>
 <body>
@@ -188,12 +202,17 @@
             Click <i class="fas fa-microphone"></i> then read the sentence aloud
         </div>
 
-        <div class="text-display">
-            {% if text_audio %}
-                {{ text_audio.text }}
-            {% else %}
-                No text available
-            {% endif %}
+        <div class="text-display-container">
+            <div class="theme-badge">
+                <span class="badge bg-info">{{ text_audio.theme if text_audio else 'No theme' }}</span>
+            </div>
+            <div class="text-display">
+                {% if text_audio %}
+                    {{ text_audio.text }}
+                {% else %}
+                    No text available
+                {% endif %}
+            </div>
         </div>
 
         <div class="recording-container">

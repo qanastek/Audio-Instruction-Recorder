@@ -1,13 +1,16 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for, send_from_directory
+from flask import Flask, request, jsonify, render_template, redirect, url_for, send_from_directory, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 import os
 from datetime import datetime
+import json
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 CORS(app)
 
-# Configuration de la base de données
+# Configuration
+app.config['SECRET_KEY'] = 'votre_clé_secrète_ici'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///data.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 UPLOAD_FOLDER = 'uploads'  # Définir le dossier d'upload
@@ -25,6 +28,8 @@ class TextAudio(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     text = db.Column(db.String(500), nullable=False)
+    theme = db.Column(db.String(100), nullable=True)
+    answer = db.Column(db.String(500), nullable=True)
     audio_filename = db.Column(db.String(200), nullable=True)
     status = db.Column(db.Boolean, default=False)  # False = not completed, True = completed
     completion_date = db.Column(db.DateTime, nullable=True)
@@ -87,11 +92,18 @@ def index():
 def data():
     if request.method == 'POST':
         new_text = request.form.get('text')
+        new_theme = request.form.get('theme')
+        new_answer = request.form.get('answer')
         if new_text:
-            text_audio = TextAudio(text=new_text)
+            text_audio = TextAudio(
+                text=new_text,
+                theme=new_theme,
+                answer=new_answer
+            )
             db.session.add(text_audio)
             db.session.commit()
-            return redirect(url_for('data'))
+            flash('Text added successfully!', 'success')
+        return redirect(url_for('data'))
     
     texts = TextAudio.query.order_by(TextAudio.created_at.desc()).all()
     return render_template('data.html', texts=texts)
@@ -173,6 +185,52 @@ def next_text():
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+@app.route('/upload_jsonl', methods=['POST'])
+def upload_jsonl():
+    if 'jsonl_file' not in request.files:
+        flash('No file uploaded', 'error')
+        return redirect(url_for('data'))
+    
+    file = request.files['jsonl_file']
+    if file.filename == '':
+        flash('No file selected', 'error')
+        return redirect(url_for('data'))
+
+    try:
+        content = file.read().decode('utf-8')
+        lines = content.strip().split('\n')
+        
+        success_count = 0
+        error_count = 0
+        
+        for line in lines:
+            try:
+                data = json.loads(line.strip())
+                
+                if 'text' not in data:
+                    error_count += 1
+                    continue
+                
+                text_audio = TextAudio(
+                    text=data['text'],
+                    theme=data.get('theme', None),
+                    answer=data.get('answer', None)
+                )
+                db.session.add(text_audio)
+                success_count += 1
+                
+            except json.JSONDecodeError:
+                error_count += 1
+                continue
+        
+        db.session.commit()
+        flash(f'Successfully added {success_count} texts. {error_count} errors.', 'success')
+        
+    except Exception as e:
+        flash(f'Error processing file: {str(e)}', 'error')
+    
+    return redirect(url_for('data'))
 
 if __name__ == '__main__':
     app.run(debug=True)
