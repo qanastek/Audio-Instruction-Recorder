@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Recording Interface</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .header-buttons {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header-button {
+            background: none;
+            border: none;
+            padding: 10px 20px;
+            margin: 0 10px;
+            cursor: pointer;
+            color: #666;
+        }
+
+        .header-button.active {
+            color: #4285f4;
+            border-bottom: 2px solid #4285f4;
+        }
+
+        .instruction {
+            text-align: center;
+            color: #666;
+            margin: 20px 0;
+        }
+
+        .text-display {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+            font-size: 20px;
+            margin: 40px 0;
+        }
+
+        .recording-controls {
+            text-align: center;
+            position: relative;
+        }
+
+        .record-button {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background-color: white;
+            border: 2px solid #ddd;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+        }
+
+        .record-button .mic-icon {
+            color: #666;
+            font-size: 24px;
+        }
+
+        .record-button.recording {
+            background-color: #ff4444;
+            border-color: #ff4444;
+        }
+
+        .record-button.recording .mic-icon {
+            color: white;
+        }
+
+        .bottom-controls {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 40px;
+        }
+
+        .control-button {
+            padding: 8px 16px;
+            border: none;
+            background-color: #eee;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .submit-button {
+            background-color: #4285f4;
+            color: white;
+        }
+
+        .progress-numbers {
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .progress-number {
+            color: #666;
+            margin: 5px 0;
+        }
+
+        .progress-number.active {
+            color: #4285f4;
+        }
+
+        .modal-body h6 {
+            color: #4285f4;
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .modal-body h6:first-child {
+            margin-top: 0;
+        }
+
+        .modal-body ul {
+            padding-left: 1.2rem;
+        }
+
+        .modal-body li {
+            margin-bottom: 0.5rem;
+            line-height: 1.4;
+        }
+
+        .alert-info {
+            background-color: #f8f9fa;
+            border-color: #4285f4;
+            color: #666;
+        }
+
+        /* Styles pour la modale username */
+        #usernameModal .modal-content {
+            border-radius: 15px;
+        }
+
+        #usernameModal .modal-header {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        #usernameModal .modal-body {
+            padding-top: 1rem;
+        }
+
+        #usernameModal .form-control {
+            border-radius: 8px;
+            padding: 10px 15px;
+            margin-top: 10px;
+        }
+
+        #usernameModal .btn-primary {
+            border-radius: 8px;
+            padding: 8px 25px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header-buttons">
+        <a href="/" class="header-button active">
+            <i class="fas fa-microphone"></i> Speak
+        </a>
+        <a href="/data" class="header-button">
+            <i class="fas fa-database"></i> Data
+        </a>
+    </div>
+
+    <div class="main-content">
+        <div class="instruction">
+            Click <i class="fas fa-microphone"></i> then read the sentence aloud
+        </div>
+
+        <div class="text-display">
+            {% if text_audio %}
+                {{ text_audio.text }}
+            {% else %}
+                No text available
+            {% endif %}
+        </div>
+
+        <div class="recording-container">
+            <div class="recording-line"></div>
+            <button class="record-button" id="recordButton" onclick="toggleRecording()">
+                <i class="fas fa-microphone"></i>
+            </button>
+            <div class="start-recording">
+                Total recorded texts: 
+                <span class="badge {% if completed_texts == total_texts %}bg-success
+                               {% elif completed_texts > 0 %}bg-primary
+                               {% else %}bg-secondary{% endif %}">
+                    {{ completed_texts }}/{{ total_texts }}
+                </span>
+            </div>
+            <div class="progress-numbers">
+                <div class="progress-number active">1</div>
+                <div class="progress-number">2</div>
+                <div class="progress-number">3</div>
+                <div class="progress-number">4</div>
+                <div class="progress-number">5</div>
+            </div>
+        </div>
+
+        <div class="bottom-controls">
+            <button class="control-button" data-bs-toggle="modal" data-bs-target="#guidelinesModal">
+                <i class="fas fa-info-circle"></i> Guidelines
+            </button>
+            <button class="control-button" onclick="reportIssue()">
+                <i class="fas fa-flag"></i> Report
+            </button>
+            <button class="control-button skip-button">
+                <i class="fas fa-forward"></i> Skip
+            </button>
+            <button class="control-button delete-button" style="display: none;">
+                <i class="fas fa-trash"></i> Delete
+            </button>
+            <button class="control-button submit-button" style="display: none;">
+                SUBMIT
+            </button>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS Bundle avec Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Le reste du script JavaScript -->
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+        let recordedBlob = null;
+        let currentTextId = {% if text_audio %}{{ text_audio.id }}{% else %}null{% endif %};
+
+        // Variables globales
+        let username = localStorage.getItem('username');
+        let usernameModal;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialiser la modale
+            usernameModal = new bootstrap.Modal(document.getElementById('usernameModal'), {
+                backdrop: 'static',
+                keyboard: false
+            });
+
+            // Vérifier le nom d'utilisateur au chargement
+            if (!username) {
+                usernameModal.show();
+            }
+        });
+
+        // Fonction pour vérifier si le nom d'utilisateur est défini
+        function checkUsername() {
+            username = localStorage.getItem('username');
+            if (!username) {
+                usernameModal.show();
+                return false;
+            }
+            return true;
+        }
+
+        async function checkMicrophonePermission() {
+            try {
+                const result = await navigator.permissions.query({ name: 'microphone' });
+                if (result.state === 'denied') {
+                    alert('Permission du microphone refusée. Veuillez autoriser l\'accès au microphone dans les paramètres de votre navigateur.');
+                    return false;
+                }
+                return true;
+            } catch (err) {
+                console.error('Erreur lors de la vérification des permissions:', err);
+                return false;
+            }
+        }
+
+        function updateButtonsVisibility() {
+            const deleteButton = document.querySelector('.delete-button');
+            const submitButton = document.querySelector('.submit-button');
+            
+            if (recordedBlob) {
+                deleteButton.style.display = 'block';
+                submitButton.style.display = 'block';
+            } else {
+                deleteButton.style.display = 'none';
+                submitButton.style.display = 'none';
+            }
+        }
+
+        function deleteRecording() {
+            recordedBlob = null;
+            audioChunks = [];
+            updateButtonsVisibility();
+            console.log("Enregistrement supprimé");
+            alert("Enregistrement supprimé avec succès");
+        }
+
+        async function toggleRecording() {
+            if (!checkUsername()) return;
+            
+            const recordButton = document.getElementById('recordButton');
+            
+            if (!isRecording) {
+                try {
+                    const hasPermission = await checkMicrophonePermission();
+                    if (!hasPermission) return;
+
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        audio: true
+                    });
+
+                    let mimeType = 'audio/webm';
+                    if (!MediaRecorder.isTypeSupported(mimeType)) {
+                        mimeType = 'audio/ogg';
+                    }
+                    if (!MediaRecorder.isTypeSupported(mimeType)) {
+                        mimeType = '';
+                    }
+
+                    mediaRecorder = new MediaRecorder(stream, { mimeType });
+                    audioChunks = [];
+
+                    mediaRecorder.addEventListener("dataavailable", (event) => {
+                        if (event.data.size > 0) {
+                            audioChunks.push(event.data);
+                        }
+                    });
+
+                    mediaRecorder.addEventListener("stop", () => {
+                        recordedBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/wav' });
+                        console.log("Audio enregistré, taille:", recordedBlob.size);
+                        updateButtonsVisibility();
+                    });
+
+                    mediaRecorder.start();
+                    recordButton.classList.add('recording');
+                    console.log("Enregistrement démarré");
+
+                } catch (err) {
+                    console.error("Erreur détaillée:", err);
+                    if (err.name === 'NotAllowedError') {
+                        alert("L'accès au microphone a été refusé.");
+                    } else if (err.name === 'NotFoundError') {
+                        alert("Aucun microphone n'a été trouvé.");
+                    } else {
+                        alert("Erreur lors de l'accès au microphone: " + err.message);
+                    }
+                    return;
+                }
+            } else {
+                stopRecording();
+            }
+            
+            isRecording = !isRecording;
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                try {
+                    mediaRecorder.stop();
+                    recordButton.classList.remove('recording');
+                    mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                    console.log("Enregistrement arrêté");
+                } catch (err) {
+                    console.error("Erreur lors de l'arrêt de l'enregistrement:", err);
+                }
+            }
+        }
+
+        function showGuidelines() {
+            alert("Guidelines clicked");
+        }
+
+        function reportIssue() {
+            if (!checkUsername()) return;
+            
+            const reportObject = prompt("Please enter the subject of your report:");
+            if (reportObject) {
+                const email = 'yanis.labrak@univ-avignon.fr';
+                const subject = `Report web audio recorder: ${reportObject}`;
+                const body = `
+Reporter: ${username}
+Text ID: ${currentTextId}
+Text content: ${document.querySelector('.text-display').innerText}
+
+Browser: ${navigator.userAgent}
+Date: ${new Date().toLocaleString()}
+
+Additional details:
+[Please add any additional information about the issue here]
+                `;
+                
+                window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            }
+        }
+
+        function skipToNextText() {
+            if (!checkUsername()) return;
+            
+            if (currentTextId === null) {
+                alert("No text available to skip.");
+                return;
+            }
+
+            fetch(`/next_text?current_id=${currentTextId}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('No more texts available');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Mettre à jour le texte affiché
+                    document.querySelector('.text-display').innerText = data.text;
+                    // Mettre à jour l'ID du texte actuel
+                    currentTextId = data.id;
+                    
+                    // Optionnel : Afficher un message si on est revenu au début
+                    if (data.wrapped) {
+                        console.log("Retour au début de la liste");
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('No texts available');
+                });
+        }
+
+        function submitRecording() {
+            if (!checkUsername()) return;
+            if (!recordedBlob) {
+                alert("Veuillez d'abord enregistrer un audio");
+                return;
+            }
+
+            const submitButton = document.querySelector('.submit-button');
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+
+            const formData = new FormData();
+            formData.append('audio', recordedBlob, 'audio.wav');
+            formData.append('text_id', currentTextId);
+            formData.append('completed_by', username);
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(result => {
+                console.log('Succès:', result);
+                alert('Enregistrement soumis avec succès!');
+                recordedBlob = null;
+                audioChunks = [];
+                submitButton.disabled = false;
+                submitButton.innerHTML = 'SUBMIT';
+                updateButtonsVisibility();
+
+                // Appeler la fonction pour passer au texte suivant
+                return fetchNextText();
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                alert('Erreur lors de la soumission de l\'enregistrement');
+                submitButton.disabled = false;
+                submitButton.innerHTML = 'SUBMIT';
+            });
+        }
+
+        function fetchNextText() {
+            if (currentTextId === null) {
+                alert("No text available to skip.");
+                return;
+            }
+
+            return fetch(`/next_text?current_id=${currentTextId}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('No more texts available');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Mettre à jour le texte affiché
+                    document.querySelector('.text-display').innerText = data.text;
+                    // Mettre à jour l'ID du texte actuel
+                    currentTextId = data.id;
+                    
+                    // Optionnel : Afficher un message si on est revenu au début
+                    if (data.wrapped) {
+                        console.log("Retour au début de la liste");
+                    }
+
+                    // Réinitialiser l'interface d'enregistrement
+                    recordedBlob = null;
+                    audioChunks = [];
+                    updateButtonsVisibility();
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    if (error.message === 'No more texts available') {
+                        alert('Tous les textes ont été complétés !');
+                        window.location.href = '/data';  // Mettre à jour la redirection
+                    } else {
+                        alert('Error loading next text');
+                    }
+                });
+        }
+
+        // Ajout des gestionnaires d'événements pour les boutons
+        document.addEventListener('DOMContentLoaded', function() {
+            // Gestionnaire pour le bouton Submit
+            const submitButton = document.querySelector('.submit-button');
+            submitButton.addEventListener('click', submitRecording);
+
+            // Gestionnaire pour le bouton Delete
+            const deleteButton = document.querySelector('.delete-button');
+            deleteButton.addEventListener('click', deleteRecording);
+
+            // Gestionnaire pour le bouton Skip
+            const skipButton = document.querySelector('.control-button.skip-button');
+            skipButton.addEventListener('click', skipToNextText);
+
+            // Initialiser la visibilité des boutons
+            updateButtonsVisibility();
+        });
+
+        // Vérifier le support du navigateur au chargement
+        window.onload = function() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                alert("Votre navigateur ne supporte pas l'enregistrement audio. Veuillez utiliser un navigateur moderne comme Chrome, Firefox, ou Safari.");
+                document.getElementById('recordButton').disabled = true;
+            }
+        };
+
+        // Fonction de sauvegarde du nom d'utilisateur
+        function saveUsername() {
+            const usernameInput = document.getElementById('username');
+            const newUsername = usernameInput.value.trim();
+            
+            if (newUsername.length < 2) {
+                usernameInput.classList.add('is-invalid');
+                return;
+            }
+            
+            localStorage.setItem('username', newUsername);
+            username = newUsername;
+            usernameInput.classList.remove('is-invalid');
+            usernameModal.hide();
+            console.log(`Welcome, ${username}!`);
+        }
+
+        // Écouter la touche Enter dans l'input du nom d'utilisateur
+        document.getElementById('username').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                saveUsername();
+            }
+        });
+
+        // Réinitialiser la validation quand l'utilisateur commence à taper
+        document.getElementById('username').addEventListener('input', function(e) {
+            e.target.classList.remove('is-invalid');
+        });
+
+        function changeUsername() {
+            usernameModal.show();
+        }
+    </script>
+
+    <!-- Ajouter la modale à la fin du body, avant les scripts -->
+    <div class="modal fade" id="guidelinesModal" tabindex="-1" aria-labelledby="guidelinesModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="guidelinesModalLabel">
+                        <i class="fas fa-info-circle"></i> Recording Guidelines
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <h6>Before Recording</h6>
+                    <ul>
+                        <li>Find a quiet environment with minimal background noise</li>
+                        <li>Use a good quality microphone if possible</li>
+                        <li>Test your microphone levels before starting</li>
+                        <li>Keep a consistent distance from your microphone</li>
+                    </ul>
+
+                    <h6>During Recording</h6>
+                    <ul>
+                        <li>Speak clearly and at a natural pace</li>
+                        <li>Pronounce each word distinctly</li>
+                        <li>Maintain a consistent volume level</li>
+                        <li>Avoid background noises (typing, clicking, etc.)</li>
+                        <li>Read the entire text without long pauses</li>
+                    </ul>
+
+                    <h6>Audio Quality Requirements</h6>
+                    <ul>
+                        <li>Recording should be clear and understandable</li>
+                        <li>No background noise or echo</li>
+                        <li>No clipping or distortion</li>
+                        <li>Complete sentence must be recorded</li>
+                    </ul>
+
+                    <div class="alert alert-info mt-3">
+                        <i class="fas fa-lightbulb"></i> <strong>Tip:</strong> 
+                        If you're not satisfied with your recording, you can delete it and try again before submitting.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Got it!</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ajouter la modale pour le nom d'utilisateur -->
+    <div class="modal fade" id="usernameModal" tabindex="-1" aria-labelledby="usernameModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="usernameModalLabel">
+                        <i class="fas fa-user"></i> Welcome!
+                    </h5>
+                </div>
+                <div class="modal-body">
+                    <p>Please enter your name to continue:</p>
+                    <input type="text" id="username" class="form-control" required>
+                    <div class="invalid-feedback">
+                        Please enter a valid name (minimum 2 characters).
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" onclick="saveUsername()">Continue</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
