@@ -5,7 +5,9 @@ A web application for collecting audio recordings with user consent for research
 ## Screenshots
 
 ### Main Recording Interface
+
 ![Recording Interface](screenshots/record.png)
+
 The main interface where users can record their voice. It includes:
 - Text display with theme
 - Recording controls (Record, Delete, Submit)
@@ -13,7 +15,9 @@ The main interface where users can record their voice. It includes:
 - Progress tracking
 
 ### Data Management
+
 ![Data Management](screenshots/data.png)
+
 The data management interface allows administrators to:
 - Add new texts manually
 - Upload texts in bulk via JSONL
@@ -22,7 +26,9 @@ The data management interface allows administrators to:
 - Access consent information
 
 ### Username Input
+
 ![Username Input](screenshots/username.png)
+
 Users must provide a username that will be:
 - Stored locally
 - Used to track recordings

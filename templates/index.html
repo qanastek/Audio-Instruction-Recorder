@@ -32,11 +32,24 @@
             margin: 0 10px;
             cursor: pointer;
             color: #666;
+            text-decoration: none;
+        }
+
+        .header-button:hover {
+            color: #4285f4;
         }
 
         .header-button.active {
             color: #4285f4;
             border-bottom: 2px solid #4285f4;
+        }
+
+        .header-button.text-danger {
+            color: #dc3545;
+        }
+
+        .header-button.text-danger:hover {
+            color: #bb2d3b;
         }
 
         .instruction {
@@ -190,11 +203,17 @@
 <body>
     <div class="header-buttons">
         <a href="/" class="header-button active">
-            <i class="fas fa-microphone"></i> Speak
+            <i class="fas fa-microphone"></i> Record
         </a>
         <a href="/data" class="header-button">
             <i class="fas fa-database"></i> Data
         </a>
+        <button onclick="changeUsername()" class="header-button">
+            <i class="fas fa-user"></i> Change User
+        </button>
+        <button onclick="disconnectUser()" class="header-button text-danger">
+            <i class="fas fa-sign-out-alt"></i> Disconnect
+        </button>
     </div>
 
     <div class="main-content">
@@ -272,22 +291,43 @@
         let usernameModal;
 
         document.addEventListener('DOMContentLoaded', function() {
-            // Initialiser la modale
+            // Initialize the modal
             usernameModal = new bootstrap.Modal(document.getElementById('usernameModal'), {
                 backdrop: 'static',
                 keyboard: false
             });
 
-            // Vérifier le nom d'utilisateur au chargement
-            if (!username) {
+            // Check if user info exists
+            const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+            if (!userInfo.username) {
                 usernameModal.show();
+            } else {
+                window.username = userInfo.username;
             }
+
+            // Add event listeners to native speaker radio buttons
+            document.querySelectorAll('input[name="nativeSpeaker"]').forEach(radio => {
+                radio.addEventListener('change', function() {
+                    const motherTongueContainer = document.getElementById('motherTongueContainer');
+                    const motherTongueInput = document.getElementById('motherTongue');
+                    
+                    if (this.value === 'no') {
+                        motherTongueContainer.style.display = 'block';
+                        motherTongueInput.required = true;
+                    } else {
+                        motherTongueContainer.style.display = 'none';
+                        motherTongueInput.required = false;
+                        motherTongueInput.value = '';
+                    }
+                });
+            });
         });
 
         // Fonction pour vérifier si le nom d'utilisateur est défini
         function checkUsername() {
-            username = localStorage.getItem('username');
-            if (!username) {
+            userInfo = localStorage.getItem('userInfo');
+            console.log("userInfo:", userInfo);
+            if (!userInfo) {
                 usernameModal.show();
                 return false;
             }
@@ -474,7 +514,15 @@ Additional details:
             const formData = new FormData();
             formData.append('audio', recordedBlob, 'audio.wav');
             formData.append('text_id', currentTextId);
-            formData.append('completed_by', username);
+
+            // Get user info from localStorage
+            const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+            if (!userInfo.username) {
+                alert('Please set up your user information first.');
+                usernameModal.show();
+                return;
+            }
+            formData.append('completed_by', userInfo.username);
 
             fetch('/upload', {
                 method: 'POST',
@@ -596,8 +644,145 @@ Additional details:
             e.target.classList.remove('is-invalid');
         });
 
+        // Function to change username
         function changeUsername() {
+            const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+            
+            // Pre-fill the form
+            if (userInfo.username) document.getElementById('username').value = userInfo.username;
+            if (userInfo.age) document.getElementById('userAge').value = userInfo.age;
+            if (userInfo.gender) document.getElementById('userGender').value = userInfo.gender;
+            if (userInfo.nativeSpeaker) {
+                document.querySelector(`input[name="nativeSpeaker"][value="${userInfo.nativeSpeaker}"]`).checked = true;
+                if (userInfo.nativeSpeaker === 'no' && userInfo.motherTongue) {
+                    document.getElementById('motherTongueContainer').style.display = 'block';
+                    document.getElementById('motherTongue').value = userInfo.motherTongue;
+                }
+            }
+            
             usernameModal.show();
+        }
+
+        // Function to disconnect user
+        function disconnectUser() {
+            if (confirm('Are you sure you want to disconnect? This will clear all your user information.')) {
+                // Clear local storage
+                localStorage.clear();
+                
+                // Reset global variables
+                window.username = null;
+                
+                // Reset form fields
+                document.getElementById('username').value = '';
+                document.getElementById('userAge').value = '';
+                document.getElementById('userGender').value = '';
+                document.querySelectorAll('input[name="nativeSpeaker"]').forEach(radio => radio.checked = false);
+                document.getElementById('motherTongue').value = '';
+                document.getElementById('motherTongueContainer').style.display = 'none';
+                
+                // Show success message
+                alert('You have been disconnected successfully.');
+                
+                // Show the username modal
+                usernameModal.show();
+            }
+        }
+
+        // Function to save user info
+        function saveUserInfo() {
+            const username = document.getElementById('username');
+            const age = document.getElementById('userAge');
+            const gender = document.getElementById('userGender');
+            const nativeSpeaker = document.querySelector('input[name="nativeSpeaker"]:checked');
+            const motherTongue = document.getElementById('motherTongue');
+
+            // Reset validation states
+            const inputs = [username, age, gender, motherTongue];
+            inputs.forEach(input => input.classList.remove('is-invalid'));
+
+            // Validate username
+            if (username.value.trim().length < 2) {
+                username.classList.add('is-invalid');
+                return;
+            }
+
+            // Validate age
+            if (!age.value || age.value < 18 || age.value > 120) {
+                age.classList.add('is-invalid');
+                return;
+            }
+
+            // Validate gender
+            if (!gender.value) {
+                gender.classList.add('is-invalid');
+                return;
+            }
+
+            // Validate native speaker selection
+            if (!nativeSpeaker) {
+                document.querySelector('input[name="nativeSpeaker"]').classList.add('is-invalid');
+                return;
+            }
+
+            // Validate mother tongue if not native speaker
+            if (nativeSpeaker.value === 'no' && !motherTongue.value.trim()) {
+                motherTongue.classList.add('is-invalid');
+                return;
+            }
+
+            // Save all information to localStorage
+            const userInfo = {
+                username: username.value.trim(),
+                age: age.value,
+                gender: gender.value,
+                nativeSpeaker: nativeSpeaker.value,
+                motherTongue: nativeSpeaker.value === 'no' ? motherTongue.value.trim() : null
+            };
+
+            localStorage.setItem('userInfo', JSON.stringify(userInfo));
+            window.username = userInfo.username;
+
+            // Hide modal
+            usernameModal.hide();
+            console.log('User info saved:', userInfo);
+        }
+
+        async function uploadAudio(audioBlob) {
+            // Get user info from localStorage
+            const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+            console.log("userInfo 100");
+            console.log(userInfo);
+            if (!userInfo.username) {
+                alert('Please set up your user information first.');
+                usernameModal.show();
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'recording.wav');
+            formData.append('text_id', currentTextId);
+            console.log("Completed by 101:", userInfo.username);
+            formData.append('completed_by', userInfo.username);  // Make sure this is being sent
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('Upload successful:', result);
+                    // Reload the page after successful upload
+                    window.location.reload();
+                } else {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Upload failed');
+                }
+            } catch (error) {
+                console.error('Error uploading audio:', error);
+                alert('Error uploading audio. Please try again.');
+            }
         }
     </script>
 
@@ -659,14 +844,69 @@ Additional details:
                     </h5>
                 </div>
                 <div class="modal-body">
-                    <p>Please enter your name to continue:</p>
-                    <input type="text" id="username" class="form-control" required>
-                    <div class="invalid-feedback">
-                        Please enter a valid name (minimum 2 characters).
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> Please provide the following information to continue:
+                    </div>
+
+                    <!-- Username field -->
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Name</label>
+                        <input type="text" id="username" class="form-control" required>
+                        <div class="invalid-feedback">
+                            Please enter a valid name (minimum 2 characters).
+                        </div>
+                    </div>
+
+                    <!-- Age field -->
+                    <div class="mb-3">
+                        <label for="userAge" class="form-label">Age</label>
+                        <input type="number" id="userAge" class="form-control" min="18" max="120" required>
+                        <div class="invalid-feedback">
+                            Please enter a valid age (18-120).
+                        </div>
+                    </div>
+
+                    <!-- Gender field -->
+                    <div class="mb-3">
+                        <label for="userGender" class="form-label">Gender</label>
+                        <select id="userGender" class="form-select" required>
+                            <option value="">Select gender...</option>
+                            <option value="male">Male</option>
+                            <option value="female">Female</option>
+                            <option value="other">Other</option>
+                            <option value="prefer_not_to_say">Prefer not to say</option>
+                        </select>
+                        <div class="invalid-feedback">
+                            Please select a gender option.
+                        </div>
+                    </div>
+
+                    <!-- Native speaker field -->
+                    <div class="mb-3">
+                        <label class="form-label">Are you a native English speaker?</label>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="nativeSpeaker" id="nativeSpeakerYes" value="yes" required>
+                                <label class="form-check-label" for="nativeSpeakerYes">Yes</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="nativeSpeaker" id="nativeSpeakerNo" value="no">
+                                <label class="form-check-label" for="nativeSpeakerNo">No</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Mother tongue field (conditionally shown) -->
+                    <div class="mb-3" id="motherTongueContainer" style="display: none;">
+                        <label for="motherTongue" class="form-label">Mother Tongue</label>
+                        <input type="text" id="motherTongue" class="form-control">
+                        <div class="invalid-feedback">
+                            Please enter your mother tongue.
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-primary" onclick="saveUsername()">Continue</button>
+                    <button type="button" class="btn btn-primary" onclick="saveUserInfo()">Continue</button>
                 </div>
             </div>
         </div>

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Consent</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .consent-container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-top: 40px;
+        }
+
+        .consent-section {
+            margin-bottom: 30px;
+        }
+
+        .consent-text h6 {
+            color: #4285f4;
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .consent-text h6:first-child {
+            margin-top: 0;
+        }
+
+        .consent-text ul {
+            padding-left: 1.2rem;
+        }
+
+        .consent-text li {
+            margin-bottom: 0.5rem;
+            line-height: 1.4;
+        }
+
+        .btn-consent {
+            width: 100%;
+            padding: 12px;
+            margin-top: 20px;
+        }
+
+        .alert-info {
+            background-color: #f8f9fa;
+            border-color: #4285f4;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="consent-container">
+        <h2 class="text-center mb-4">Research Participation Consent</h2>
+
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i> You must accept this consent form to use the application.
+        </div>
+        
+        <div class="consent-text">
+            <h6>Research Study Information</h6>
+            <p>You are invited to participate in a research study about voice recording and data collection. This study is conducted by researchers at the University of Avignon.</p>
+
+            <h6>Purpose</h6>
+            <p>The purpose of this research is to collect voice recordings that will be used for academic research and will be publicly released online.</p>
+
+            <h6>Data Collection</h6>
+            <p>We will collect:</p>
+            <ul>
+                <li>Your voice recordings</li>
+                <li>Your username</li>
+                <li>Recording timestamps</li>
+            </ul>
+
+            <h6>Data Usage</h6>
+            <p>Your recordings will be:</p>
+            <ul>
+                <li>Used for research purposes</li>
+                <li>Made publicly available online</li>
+                <li>Potentially used in future research studies</li>
+            </ul>
+
+            <h6>Rights and Participation</h6>
+            <p>Your participation is voluntary. You can:</p>
+            <ul>
+                <li>Choose not to participate</li>
+                <li>Stop participating at any time</li>
+                <li>Request the removal of your data by contacting us at <a href="mailto:contact@example.com">contact@example.com</a></li>
+            </ul>
+        </div>
+
+        <form id="consentForm" method="POST" action="{{ url_for('submit_consent') }}">
+            <div class="form-check mt-4">
+                <input class="form-check-input" type="checkbox" id="consent1" required>
+                <label class="form-check-label" for="consent1">
+                    I confirm that I am 18 years or older
+                </label>
+            </div>
+
+            <div class="form-check mt-3">
+                <input class="form-check-input" type="checkbox" id="consent2" required>
+                <label class="form-check-label" for="consent2">
+                    I understand that my participation is voluntary and I can withdraw at any time
+                </label>
+            </div>
+
+            <div class="form-check mt-3">
+                <input class="form-check-input" type="checkbox" id="consent3" required>
+                <label class="form-check-label" for="consent3">
+                    I have read and understood the above information. I consent to participate in this research and agree to have my recordings publicly released online.
+                </label>
+            </div>
+
+            <input type="hidden" name="consent_version" value="1.0">
+            <button type="submit" class="btn btn-primary btn-consent" id="submitConsent" disabled>
+                I Agree to Participate
+            </button>
+        </form>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Enable submit button only when all checkboxes are checked
+        const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+        const submitButton = document.getElementById('submitConsent');
+
+        function updateSubmitButton() {
+            const allChecked = Array.from(checkboxes).every(checkbox => checkbox.checked);
+            submitButton.disabled = !allChecked;
+        }
+
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', updateSubmitButton);
+        });
+    </script>
+</body>
+</html> 

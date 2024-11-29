@@ -1,10 +1,12 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for, send_from_directory, flash
+from flask import Flask, request, jsonify, render_template, redirect, url_for, send_from_directory, flash, session, send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 import os
 from datetime import datetime
 import json
 from werkzeug.utils import secure_filename
+import csv
+from io import BytesIO, TextIOWrapper
 
 app = Flask(__name__)
 CORS(app)
@@ -35,6 +37,10 @@ class TextAudio(db.Model):
     completion_date = db.Column(db.DateTime, nullable=True)
     completed_by = db.Column(db.String(100), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    consent_date = db.Column(db.DateTime, nullable=True)
+    consent_version = db.Column(db.String(10), nullable=True)
+    consent_ip = db.Column(db.String(45), nullable=True)
+    consent_user_agent = db.Column(db.String(500), nullable=True)
 
     def __repr__(self):
         return f'<TextAudio {self.id}>'
@@ -75,8 +81,32 @@ def migrate_data():
         db.session.commit()
         print("Migration terminée avec succès!")
 
+# Add this near the top of your file with other configurations
+PREDEFINED_THEMES = [
+    "Science",
+    "History",
+    "Literature",
+    "Geography",
+    "Mathematics",
+    "Technology",
+    "Arts",
+    "Music",
+    "Sports",
+    "Current Events",
+    "Philosophy",
+    "Economics",
+    "Psychology",
+    "Biology",
+    "Physics",
+    "Chemistry"
+]
+
 @app.route('/')
 def index():
+    # Check if user has given consent
+    if 'consent' not in session:
+        return redirect(url_for('consent'))
+        
     text_audio = TextAudio.query.filter_by(status=False).first()
     
     # Obtenir les statistiques
@@ -105,8 +135,49 @@ def data():
             flash('Text added successfully!', 'success')
         return redirect(url_for('data'))
     
-    texts = TextAudio.query.order_by(TextAudio.created_at.desc()).all()
-    return render_template('data.html', texts=texts)
+    # Get sorting parameters from URL
+    sort_column = request.args.get('sort', 'id')  # default sort by id
+    sort_direction = request.args.get('direction', 'asc')  # default ascending
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 5, type=int)
+    
+    # Create the base query
+    query = TextAudio.query
+
+    # Apply sorting based on column
+    if sort_column == 'id':
+        order_by = TextAudio.id
+    elif sort_column == 'theme':
+        order_by = TextAudio.theme
+    elif sort_column == 'text':
+        order_by = TextAudio.text
+    elif sort_column == 'answer':
+        order_by = TextAudio.answer
+    elif sort_column == 'status':
+        order_by = TextAudio.status
+    elif sort_column == 'completed_by':
+        order_by = TextAudio.completed_by
+    elif sort_column == 'completion_date':
+        order_by = TextAudio.completion_date
+    else:
+        order_by = TextAudio.id  # fallback to id
+
+    # Apply sort direction
+    if sort_direction == 'desc':
+        order_by = order_by.desc()
+    
+    # Get paginated and sorted results
+    pagination = query.order_by(order_by).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+    
+    return render_template('data.html', 
+                         pagination=pagination,
+                         texts=pagination.items,
+                         themes=PREDEFINED_THEMES,
+                         current_sort=sort_column,
+                         current_direction=sort_direction,
+                         current_per_page=per_page)
 
 @app.route('/upload', methods=['POST'])
 def upload_audio():
@@ -116,6 +187,7 @@ def upload_audio():
 
         text_id = request.form.get('text_id')
         completed_by = request.form.get('completed_by', 'Anonymous')
+        print("Completed by:", completed_by)
         
         audio = request.files['audio']
         if audio.filename == '':
@@ -138,13 +210,25 @@ def upload_audio():
         with open(os.path.join('uploads', filename), 'wb') as f:
             f.write(audio_data)
 
-        # Mettre à jour la base de données
+        # Get consent information from session
+        consent_info = session.get('consent')
+        if not consent_info:
+            return jsonify({'error': 'No consent information found'}), 403
+
+        # Update the database record with consent information
         text_audio = TextAudio.query.get(text_id)
         if text_audio:
             text_audio.audio_filename = filename
             text_audio.status = True
             text_audio.completion_date = datetime.utcnow()
             text_audio.completed_by = completed_by
+            
+            # Add consent information
+            text_audio.consent_date = consent_info['date']
+            text_audio.consent_version = consent_info['version']
+            text_audio.consent_ip = consent_info['ip']
+            text_audio.consent_user_agent = consent_info['user_agent']
+            
             db.session.commit()
 
         return jsonify({
@@ -154,7 +238,7 @@ def upload_audio():
         }), 200
 
     except Exception as e:
-        print(f"Erreur lors de l'upload: {str(e)}")
+        print(f"Error during upload: {str(e)}")
         return jsonify({'error': f'Internal server error: {str(e)}'}), 500
 
 @app.route('/next_text', methods=['GET'])
@@ -231,6 +315,117 @@ def upload_jsonl():
         flash(f'Error processing file: {str(e)}', 'error')
     
     return redirect(url_for('data'))
+
+@app.route('/consent')
+def consent():
+    return render_template('consent.html')
+
+@app.route('/submit_consent', methods=['POST'])
+def submit_consent():
+    try:
+        # Get user information using the new helper function
+        user_ip = get_client_ip()
+        user_agent = request.headers.get('User-Agent')
+        consent_version = request.form.get('consent_version', '1.0')
+        consent_date = datetime.utcnow()
+        
+        # Store consent in session
+        session['consent'] = {
+            'date': consent_date,
+            'version': consent_version,
+            'ip': user_ip,
+            'user_agent': user_agent
+        }
+        
+        return redirect(url_for('index'))
+    except Exception as e:
+        flash('Error processing consent: ' + str(e), 'error')
+        return redirect(url_for('consent'))
+
+def get_client_ip():
+    """Get the real client IP address considering various proxy headers"""
+    # Check X-Forwarded-For header first (used by most proxies)
+    if 'X-Forwarded-For' in request.headers:
+        # Get the first IP in the chain (real client IP)
+        return request.headers.getlist("X-Forwarded-For")[0].split(',')[0].strip()
+    
+    # Check other common headers
+    if 'X-Real-IP' in request.headers:
+        return request.headers.get('X-Real-IP')
+    
+    # If no proxy headers found, use the direct client IP
+    return request.remote_addr
+
+@app.route('/export/<format>')
+def export_data(format):
+    # Get all texts
+    texts = TextAudio.query.all()
+    
+    # Convert texts to dictionary format
+    data = [{
+        'id': text.id,
+        'text': text.text,
+        'theme': text.theme,
+        'answer': text.answer,
+        'status': text.status,
+        'audio_filename': text.audio_filename,
+        'completed_by': text.completed_by,
+        'completion_date': text.completion_date.isoformat() if text.completion_date else None,
+        'consent_date': text.consent_date.isoformat() if text.consent_date else None,
+        'consent_version': text.consent_version,
+    } for text in texts]
+    
+    if format == 'json':
+        # Export as JSON
+        output = json.dumps(data, indent=2)
+        bytes_io = BytesIO(output.encode('utf-8'))
+        return send_file(
+            bytes_io,
+            mimetype='application/json',
+            as_attachment=True,
+            download_name='texts_export.json'
+        )
+        
+    elif format == 'jsonl':
+        # Export as JSONL (JSON Lines)
+        output = '\n'.join(json.dumps(item) for item in data)
+        bytes_io = BytesIO(output.encode('utf-8'))
+        return send_file(
+            bytes_io,
+            mimetype='application/x-jsonlines',
+            as_attachment=True,
+            download_name='texts_export.jsonl'
+        )
+        
+    elif format == 'csv':
+        # Export as CSV
+        output = BytesIO()
+        if data:
+            # Write the BOM for Excel compatibility
+            output.write(b'\xef\xbb\xbf')
+            
+            # Create a text wrapper around the BytesIO buffer
+            text_output = TextIOWrapper(output, encoding='utf-8', newline='')
+            
+            writer = csv.DictWriter(text_output, fieldnames=data[0].keys())
+            writer.writeheader()
+            writer.writerows(data)
+            
+            # Detach the text wrapper to get back the BytesIO
+            text_output.detach()
+            
+            # Move cursor to the beginning of the buffer
+            output.seek(0)
+            
+        return send_file(
+            output,
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name='texts_export.csv'
+        )
+    
+    else:
+        return jsonify({'error': 'Invalid format'}), 400
 
 if __name__ == '__main__':
     app.run(debug=True)
