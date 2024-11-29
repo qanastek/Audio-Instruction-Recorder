@@ -45,6 +45,22 @@ class TextAudio(db.Model):
     def __repr__(self):
         return f'<TextAudio {self.id}>'
 
+class Feedback(db.Model):
+    __tablename__ = 'feedback'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    text_audio_id = db.Column(db.Integer, db.ForeignKey('text_audio.id'), nullable=False)
+    username = db.Column(db.String(100), nullable=False)
+    ip_address = db.Column(db.String(45), nullable=False)
+    is_positive = db.Column(db.Boolean, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Unique constraint to prevent multiple feedbacks from same user for same recording
+    __table_args__ = (
+        db.UniqueConstraint('text_audio_id', 'username', 'ip_address', name='unique_feedback_constraint'),
+    )
+
 # Supprimer la base de données existante et en créer une nouvelle
 def reset_database():
     with app.app_context():
@@ -426,6 +442,82 @@ def export_data(format):
     
     else:
         return jsonify({'error': 'Invalid format'}), 400
+
+@app.route('/submit_feedback', methods=['POST'])
+def submit_feedback():
+    try:
+        data = request.get_json()
+        text_audio_id = data.get('text_audio_id')
+        is_positive = data.get('is_positive')
+        username = data.get('username')
+        
+        if not all([text_audio_id, username]):
+            return jsonify({'error': 'Missing required information'}), 400
+
+        # Verify that the text has an audio recording
+        text_audio = TextAudio.query.get(text_audio_id)
+        if not text_audio or not text_audio.audio_filename:
+            return jsonify({'error': 'No audio recording available for this text'}), 400
+
+        # Get user's IP
+        ip_address = request.remote_addr
+        
+        # Check if feedback already exists
+        existing_feedback = Feedback.query.filter_by(
+            text_audio_id=text_audio_id,
+            username=username,
+            ip_address=ip_address
+        ).first()
+
+        if existing_feedback:
+            # Update existing feedback
+            existing_feedback.is_positive = is_positive
+            existing_feedback.updated_at = datetime.utcnow()
+        else:
+            # Create new feedback
+            new_feedback = Feedback(
+                text_audio_id=text_audio_id,
+                username=username,
+                ip_address=ip_address,
+                is_positive=is_positive
+            )
+            db.session.add(new_feedback)
+
+        db.session.commit()
+        return jsonify({'message': 'Feedback submitted successfully'}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/get_feedback_counts/<int:text_audio_id>')
+def get_feedback_counts(text_audio_id):
+    try:
+        positive_count = Feedback.query.filter_by(text_audio_id=text_audio_id, is_positive=True).count()
+        negative_count = Feedback.query.filter_by(text_audio_id=text_audio_id, is_positive=False).count()
+        
+        # Get current user's feedback if they're logged in
+        username = request.args.get('username')
+        ip_address = request.remote_addr
+        user_feedback = None
+        
+        if username:
+            feedback = Feedback.query.filter_by(
+                text_audio_id=text_audio_id,
+                username=username,
+                ip_address=ip_address
+            ).first()
+            if feedback:
+                user_feedback = feedback.is_positive
+
+        return jsonify({
+            'positive_count': positive_count,
+            'negative_count': negative_count,
+            'user_feedback': user_feedback
+        }), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -168,6 +168,45 @@
         tbody tr:hover {
             background-color: #f8f9fa;
         }
+
+        .feedback-buttons {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+        }
+
+        .feedback-btn {
+            padding: 0.25rem 0.5rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .feedback-btn:not(.active) {
+            opacity: 0.6;
+        }
+
+        .feedback-btn:hover {
+            opacity: 1;
+        }
+
+        .feedback-btn.active {
+            opacity: 1;
+        }
+
+        /* Nouveaux styles pour le message "No audio available" */
+        .text-muted.small {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.25rem;
+            color: #6c757d;
+        }
+
+        .text-muted.small i {
+            font-size: 0.875rem;
+        }
     </style>
 </head>
 <body>
@@ -319,6 +358,7 @@
                                 <i class="fas fa-sort{% if current_sort == 'completion_date' %}{{ '-up' if current_direction == 'asc' else '-down' }}{% endif %}"></i>
                             </th>
                             <th>Consent Info</th>
+                            <th>Feedback</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -380,6 +420,22 @@
                                     </button>
                                 {% else %}
                                     <span class="badge bg-warning">No consent</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if text.audio_filename %}
+                                    <div class="feedback-buttons" data-text-id="{{ text.id }}">
+                                        <button class="btn btn-sm feedback-btn" data-value="true" title="Good quality">
+                                            <i class="fas fa-thumbs-up"></i> <span class="positive-count">0</span>
+                                        </button>
+                                        <button class="btn btn-sm feedback-btn" data-value="false" title="Poor quality">
+                                            <i class="fas fa-thumbs-down"></i> <span class="negative-count">0</span>
+                                        </button>
+                                    </div>
+                                {% else %}
+                                    <div class="text-muted small">
+                                        <i class="fas fa-info-circle"></i> No audio available
+                                    </div>
                                 {% endif %}
                             </td>
                         </tr>
@@ -575,73 +631,80 @@
             });
         });
     </script>
-</body>
-</html> 
-                    // Update sort icons
-                    document.querySelectorAll('th.sortable i').forEach(icon => {
-                        icon.className = 'fas fa-sort';
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+            
+            // Initialize feedback buttons only for rows with audio
+            document.querySelectorAll('.feedback-buttons').forEach(container => {
+                const textId = container.dataset.textId;
+                loadFeedbackCounts(textId, container);
+                
+                container.querySelectorAll('.feedback-btn').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        if (!userInfo.username) {
+                            alert('Please log in to provide feedback.');
+                            return;
+                        }
+                        
+                        const isPositive = btn.dataset.value === 'true';
+                        await submitFeedback(textId, isPositive, userInfo.username, container);
                     });
-                    
-                    const icon = th.querySelector('i');
-                    if (currentSort.direction === 'asc') {
-                        icon.className = 'fas fa-sort-up';
-                    } else {
-                        icon.className = 'fas fa-sort-down';
-                    }
                 });
             });
-
-            function sortTable(column) {
-                const tbody = table.querySelector('tbody');
-                const rows = Array.from(tbody.querySelectorAll('tr'));
-
-                // Determine sort direction
-                if (currentSort.column === column) {
-                    currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
-                } else {
-                    currentSort.column = column;
-                    currentSort.direction = 'asc';
-                }
-
-                // Sort the rows
-                rows.sort((a, b) => {
-                    let aValue = getCellValue(a, column);
-                    let bValue = getCellValue(b, column);
-
-                    // Handle special cases
-                    if (column === 'id') {
-                        return compareValues(parseInt(aValue), parseInt(bValue));
-                    } else if (column === 'status') {
-                        return compareValues(aValue === 'Completed', bValue === 'Completed');
-                    } else if (column === 'completion_date') {
-                        // Handle empty dates
-                        if (!aValue) return 1;
-                        if (!bValue) return -1;
-                        return compareValues(new Date(aValue), new Date(bValue));
-                    } else {
-                        return compareValues(aValue, bValue);
-                    }
-                });
-
-                // Reorder the table
-                tbody.innerHTML = '';
-                rows.forEach(row => tbody.appendChild(row));
-            }
-
-            function getCellValue(row, column) {
-                const columnIndex = Array.from(row.parentElement.parentElement.querySelector('thead tr').children)
-                    .findIndex(th => th.dataset.sort === column);
-                
-                const cell = row.children[columnIndex];
-                return cell ? cell.textContent.trim() : '';
-            }
-
-            function compareValues(a, b) {
-                if (a === b) return 0;
-                
-                return (a < b ? -1 : 1) * (currentSort.direction === 'asc' ? 1 : -1);
-            }
         });
+
+        async function loadFeedbackCounts(textId, container) {
+            try {
+                const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+                const response = await fetch(`/get_feedback_counts/${textId}?username=${userInfo.username || ''}`);
+                const data = await response.json();
+                
+                // Update counts
+                container.querySelector('.positive-count').textContent = data.positive_count;
+                container.querySelector('.negative-count').textContent = data.negative_count;
+                
+                // Update button states
+                container.querySelectorAll('.feedback-btn').forEach(btn => {
+                    btn.classList.remove('btn-success', 'btn-danger', 'active');
+                });
+                
+                if (data.user_feedback !== null) {
+                    const activeBtn = container.querySelector(
+                        `.feedback-btn[data-value="${data.user_feedback}"]`
+                    );
+                    activeBtn.classList.add(data.user_feedback ? 'btn-success' : 'btn-danger', 'active');
+                }
+            } catch (error) {
+                console.error('Error loading feedback:', error);
+            }
+        }
+
+        async function submitFeedback(textId, isPositive, username, container) {
+            try {
+                const response = await fetch('/submit_feedback', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text_audio_id: textId,
+                        is_positive: isPositive,
+                        username: username
+                    })
+                });
+                
+                if (response.ok) {
+                    await loadFeedbackCounts(textId, container);
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to submit feedback');
+                }
+            } catch (error) {
+                console.error('Error submitting feedback:', error);
+                alert(error.message || 'Failed to submit feedback. Please try again.');
+            }
+        }
     </script>
 </body>
 </html> 
