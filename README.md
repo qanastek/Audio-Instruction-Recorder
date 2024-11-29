@@ -24,6 +24,7 @@ The data management interface allows administrators to:
 - View all recordings
 - Monitor completion status
 - Access consent information
+- Add feedbacks
 
 ### Username Input
 
